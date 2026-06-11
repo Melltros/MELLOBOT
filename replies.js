@@ -3,7 +3,7 @@ const autoReplies = [
   // ---- GREETINGS ----
   {
     trigger: ['hello', 'hi', 'hey', 'sup', 'wassup'],
-    response: '👋 Hey there! How are you doing?'
+    response: '👋 Hey NIGGA! How are you doing?'
   },
   {
     trigger: ['good morning', 'gm'],
