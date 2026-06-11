@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
-const { GoogleGenAI } = require('@google/genai');
+const Groq = require('groq-sdk');
 const db = require('./db');
 
 // ===============================
@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('🤖 MelloBOT is running 24/7 with Hood AI brain!');
+  res.send('🤖 MelloBOT is running 24/7 with Groq AI brain!');
 });
 
 app.listen(PORT, () => {
@@ -30,14 +30,14 @@ const client = new Client({
 });
 
 // ===============================
-// GEMINI AI BRAIN SETUP (Free Tier)
+// GROQ AI BRAIN SETUP (Free Tier)
 // ===============================
-let ai = null;
-if (process.env.GEMINI_API_KEY) {
-  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  console.log('✨ Gemini AI brain loaded successfully!');
+let groq = null;
+if (process.env.GROQ_API_KEY) {
+  groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  console.log('✨ Groq AI brain loaded successfully!');
 } else {
-  console.log('⚠️ GEMINI_API_KEY is not defined in .env. AI auto-replies will not work.');
+  console.log('⚠️ GROQ_API_KEY is not defined in .env. AI auto-replies will not work.');
 }
 
 // ===============================
@@ -49,32 +49,25 @@ function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Generate content with retry and exponential backoff
-async function generateContentWithRetry(prompt, retries = 5, delay = 500) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
+// Generate AI response using Groq (Llama 3.3 70B)
+async function generateAiResponse(prompt) {
+  const chatCompletion = await groq.chat.completions.create({
+    messages: [
+      {
+        role: 'system',
+        content: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
         You love to roast users and make fun of their messages with sharp, brutal, and hilarious roasts. Be direct, tease them, and use savage humor to playfully "rage bait" them (provoking funny reactions).
-        If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.
-        User message: ${prompt}`
-      });
-      return response;
-    } catch (err) {
-      const errMsg = (err.message || err.toString()).toLowerCase();
-      const isSafetyBlock = errMsg.includes('safety') || errMsg.includes('blocked') || errMsg.includes('candidate');
-      if (isSafetyBlock) {
-        throw err;
+        If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.`
+      },
+      {
+        role: 'user',
+        content: prompt
       }
-      if (i === retries - 1) {
-        throw err;
-      }
-      console.warn(`⚠️ Gemini API failed (attempt ${i + 1}/${retries}). Retrying in ${delay}ms...`, err.message);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
-    }
-  }
+    ],
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.85
+  });
+  return chatCompletion.choices[0].message.content;
 }
 
 // ===============================
@@ -361,10 +354,10 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===============================
-  // GEMINI AI BRAIN (Auto-respond to all chat)
+  // GROQ AI BRAIN (Auto-respond to all chat)
   // ===============================
-  if (!ai) {
-    // If Gemini key is not configured, don't reply to avoid crashes
+  if (!groq) {
+    // If Groq key is not configured, don't reply
     return;
   }
 
@@ -372,24 +365,27 @@ client.on('messageCreate', async (message) => {
   message.channel.sendTyping();
 
   try {
-    const response = await generateContentWithRetry(content);
+    const replyText = await generateAiResponse(content);
     
-    const replyText = response.text || 'Yo, I got nothin to say to that.';
+    if (!replyText) {
+      return message.reply('Yo, I got nothin to say to that.');
+    }
     
     if (replyText.length > 2000) {
       return message.reply(replyText.slice(0, 1990) + '... (truncated)');
     }
     return message.reply(replyText);
   } catch (err) {
-    console.error('❌ Gemini API Error:', err);
-    
+    console.error('❌ Groq API Error:', err);
     const errMsg = (err.message || err.toString()).toLowerCase();
-    const isSafetyBlock = errMsg.includes('safety') || errMsg.includes('blocked') || errMsg.includes('candidate');
+    
+    // Check for safety filter blocks or policy violations
+    const isSafetyBlock = errMsg.includes('safety') || errMsg.includes('policy') || errMsg.includes('blocked') || errMsg.includes('censor');
     
     if (isSafetyBlock) {
       const safetyRoasts = [
         "Yo, you said some weird garbage that got censored. Stop buggin' and keep it clean.",
-        "Nah, Google's filters blocked your trash message. Even my circuits can't look at that.",
+        "Nah, the filters blocked your trash message. Even my circuits can't look at that.",
         "Man, you trippin'. I'm not even gonna respond to that nonsense.",
         "Your message got censored by the safety team. Clean up your mouth, homie.",
         "Yo, that take was so wild the API refused to touch it. Try again with some sense."
