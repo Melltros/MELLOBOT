@@ -49,6 +49,78 @@ function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// Fetch meme templates from Imgflip and match query
+async function getImgflipMeme(query) {
+  try {
+    const res = await fetch('https://api.imgflip.com/get_memes');
+    const data = await res.json();
+    if (!data || !data.success || !data.data || !data.data.memes) {
+      return null;
+    }
+    const memes = data.data.memes;
+    
+    if (!query) {
+      // Return a random meme if no query is specified
+      return getRandom(memes);
+    }
+    
+    const cleanQuery = query.toLowerCase().trim();
+    
+    // 1. Exact match
+    let match = memes.find(m => m.name.toLowerCase() === cleanQuery);
+    
+    // 2. Includes match
+    if (!match) {
+      match = memes.find(m => m.name.toLowerCase().includes(cleanQuery));
+    }
+    
+    // 3. Split-words match
+    if (!match) {
+      const words = cleanQuery.split(/\s+/).filter(w => w.length > 1);
+      if (words.length > 0) {
+        match = memes.find(m => {
+          const nameLower = m.name.toLowerCase();
+          return words.every(word => nameLower.includes(word));
+        });
+      }
+    }
+    
+    return match || null;
+  } catch (error) {
+    console.error('❌ Error fetching Imgflip memes:', error);
+    return null;
+  }
+}
+
+// Fetch guild stickers and match query
+async function getGuildSticker(guild, query) {
+  if (!guild || !query) return null;
+  try {
+    const stickers = await guild.stickers.fetch().catch(() => null);
+    if (!stickers || stickers.size === 0) return null;
+    
+    const cleanQuery = query.toLowerCase().trim();
+    
+    // 1. Exact match
+    let match = stickers.find(s => s.name.toLowerCase() === cleanQuery);
+    
+    // 2. Includes match
+    if (!match) {
+      match = stickers.find(s => s.name.toLowerCase().includes(cleanQuery));
+    }
+    
+    // 3. Match tag / description
+    if (!match) {
+      match = stickers.find(s => s.tags && s.tags.toLowerCase().includes(cleanQuery));
+    }
+    
+    return match || null;
+  } catch (error) {
+    console.error('❌ Error fetching guild stickers:', error);
+    return null;
+  }
+}
+
 // Generate AI response using Groq (Llama 3.3 70B)
 async function generateAiResponse(prompt) {
   const chatCompletion = await groq.chat.completions.create({
@@ -57,7 +129,27 @@ async function generateAiResponse(prompt) {
         role: 'system',
         content: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
         You love to roast users and make fun of their messages with sharp, brutal, and hilarious roasts. Be direct, tease them, and use savage humor to playfully "rage bait" them (provoking funny reactions).
-        If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.`
+        If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.
+
+        VISUALS CAPABILITY:
+        You can dynamically decide to append a meme or sticker when it makes the roast/reply even funnier or fits the conversation perfectly.
+        - To reply with a meme, append [MEME: Template Name] at the very end of your message. Examples:
+          * [MEME: Drake Hotline Bling] (dislike vs like)
+          * [MEME: Distracted Boyfriend] (unfaithfulness/distraction)
+          * [MEME: Two Buttons] (difficult choices)
+          * [MEME: Change My Mind] (challenging opinions)
+          * [MEME: Clown Inputing HTML] (clownish behavior)
+          * [MEME: Batman Slapping Robin] (slapping sense into someone)
+          * [MEME: Mocking Spongebob] (mocking text)
+          * [MEME: Spider Man Double] (pointing fingers / same person)
+          * [MEME: Hide the Pain Harold] (awkward/painful smile)
+          * [MEME: This Is Fine] (chaos/everything is burning)
+          * Or any other well-known internet meme template.
+        - To reply with a sticker from the Discord server itself, append [STICKER: Sticker Name] at the very end of your message. Examples: [STICKER: lol], [STICKER: angry], etc.
+        
+        Rules for visuals:
+        - Only use ONE visual tag per reply, and only when it genuinely adds to the humor. Do not spam them on every reply.
+        - Place the tag at the absolute end of the reply text.`
       },
       {
         role: 'user',
@@ -263,6 +355,8 @@ client.on('messageCreate', async (message) => {
 > 🤗 \`!hug @user\` - Give someone a hug
 > 👋 \`!slap @user\` - Slap someone
 > 📢 \`!say <text>\` - Make me announce something
+> 🖼️ \`!meme [query]\` - Search and send a meme template (or random)
+> 🏷️ \`!sticker [query]\` - Search and send a server sticker (or list available)
 
 👮 **Moderation Commands:**
 > ⚠️ \`!warn @user <reason>\` - Warn a user
@@ -348,12 +442,58 @@ client.on('messageCreate', async (message) => {
     return message.channel.send(`📢 ${text}`);
   }
 
+  // Meme command
+  if (lowerContent.startsWith('!meme')) {
+    const query = content.slice(5).trim();
+    message.channel.sendTyping();
+    const matchedMeme = await getImgflipMeme(query);
+    if (!matchedMeme) {
+      return message.reply('❌ Yo, I couldn\'t find any memes matching that.');
+    }
+    const embed = {
+      color: 0xff007f,
+      title: matchedMeme.name,
+      image: {
+        url: matchedMeme.url,
+      },
+      footer: {
+        text: 'MelloBOT Meme Engine 🕶️',
+      }
+    };
+    return message.reply({ embeds: [embed] });
+  }
+
+  // Sticker command
+  if (lowerContent.startsWith('!sticker')) {
+    const query = content.slice(8).trim();
+    if (!message.guild) {
+      return message.reply('❌ Yo, stickers can only be used in a server.');
+    }
+    
+    const stickers = await message.guild.stickers.fetch().catch(() => null);
+    if (!stickers || stickers.size === 0) {
+      return message.reply('❌ Yo, this server has no custom stickers.');
+    }
+    
+    if (!query) {
+      const stickerList = stickers.map(s => `• \`${s.name}\``).join('\n');
+      return message.reply(`📋 **Available custom stickers in this server:**\n${stickerList}\n\n*Use \`!sticker <name>\` to send one!*`);
+    }
+    
+    const matchedSticker = await getGuildSticker(message.guild, query);
+    if (!matchedSticker) {
+      return message.reply(`❌ Yo, I couldn't find a sticker named "${query}".`);
+    }
+    
+    return message.reply({ stickers: [matchedSticker.id] });
+  }
+
   // If a message starts with '!', it was meant to be a command but didn't match any above
   if (content.startsWith('!')) {
     return message.reply('❌ Yo, that command doesn\'t exist. Type `!help` to see what I can do.');
   }
 
-  // ===============================
+// ===============================
   // GROQ AI BRAIN (Auto-respond to all chat)
   // ===============================
   if (!groq) {
@@ -365,16 +505,80 @@ client.on('messageCreate', async (message) => {
   message.channel.sendTyping();
 
   try {
-    const replyText = await generateAiResponse(content);
+    let replyText = await generateAiResponse(content);
     
     if (!replyText) {
       return message.reply('Yo, I got nothin to say to that.');
     }
     
-    if (replyText.length > 2000) {
-      return message.reply(replyText.slice(0, 1990) + '... (truncated)');
+    // Parse out [MEME: ...] and [STICKER: ...] tags
+    let memeQuery = null;
+    let stickerQuery = null;
+    
+    // Extract [MEME: ...] tag
+    const memeRegex = /\[MEME:\s*(.+?)\]/i;
+    const memeMatch = replyText.match(memeRegex);
+    if (memeMatch) {
+      memeQuery = memeMatch[1].trim();
+      replyText = replyText.replace(memeRegex, '').trim();
     }
-    return message.reply(replyText);
+    
+    // Extract [STICKER: ...] tag
+    const stickerRegex = /\[STICKER:\s*(.+?)\]/i;
+    const stickerMatch = replyText.match(stickerRegex);
+    if (stickerMatch) {
+      stickerQuery = stickerMatch[1].trim();
+      replyText = replyText.replace(stickerRegex, '').trim();
+    }
+    
+    // Fallback if message became empty after tag removal
+    if (!replyText && (memeQuery || stickerQuery)) {
+      replyText = '';
+    } else if (!replyText) {
+      return message.reply('Yo, I got nothin to say to that.');
+    }
+    
+    const replyPayload = {};
+    if (replyText) {
+      replyPayload.content = replyText;
+    }
+    
+    // Process meme if detected
+    if (memeQuery) {
+      const matchedMeme = await getImgflipMeme(memeQuery);
+      if (matchedMeme) {
+        const embed = {
+          color: 0x0099ff,
+          title: matchedMeme.name,
+          image: {
+            url: matchedMeme.url,
+          },
+          footer: {
+            text: 'MelloBOT Meme Engine 🕶️',
+          }
+        };
+        replyPayload.embeds = [embed];
+      }
+    }
+    
+    // Process sticker if detected
+    if (stickerQuery && message.guild) {
+      const matchedSticker = await getGuildSticker(message.guild, stickerQuery);
+      if (matchedSticker) {
+        replyPayload.stickers = [matchedSticker.id];
+      }
+    }
+    
+    if (replyPayload.content && replyPayload.content.length > 2000) {
+      replyPayload.content = replyPayload.content.slice(0, 1990) + '... (truncated)';
+    }
+    
+    // Fallback: If payload has absolutely no content, embeds, or stickers, send default message
+    if (!replyPayload.content && !replyPayload.embeds && !replyPayload.stickers) {
+      return message.reply('Yo, I got nothin to say to that.');
+    }
+    
+    return message.reply(replyPayload);
   } catch (err) {
     console.error('❌ Groq API Error:', err);
     const errMsg = (err.message || err.toString()).toLowerCase();
