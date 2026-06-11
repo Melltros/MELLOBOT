@@ -375,7 +375,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(getRandom(safetyRoasts));
     }
     
-    return message.reply('❌ Yo, my brain got short-circuited. Try again in a bit.');
+    return message.reply(`❌ Yo, my brain got short-circuited. Error: ${err.message || err.toString()}`);
   }
 });
 
