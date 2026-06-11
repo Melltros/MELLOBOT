@@ -121,8 +121,15 @@ async function getGuildSticker(guild, query) {
   }
 }
 
+// Keep track of recently used memes to prevent duplicates
+const recentMemes = [];
+
 // Generate AI response using Groq (Llama 3.3 70B)
-async function generateAiResponse(prompt) {
+async function generateAiResponse(prompt, recentMemesList = []) {
+  const recentMemesStr = recentMemesList.length > 0 
+    ? `\n\nRecently used memes (DO NOT USE OR REPEAT THESE TEMPLATES: ${recentMemesList.join(', ')}). Choose different, unique meme templates if you want to send a meme.`
+    : '';
+
   const chatCompletion = await groq.chat.completions.create({
     messages: [
       {
@@ -152,7 +159,7 @@ async function generateAiResponse(prompt) {
         
         Rules for visuals:
         - Only use ONE visual tag per reply, and only when it genuinely adds to the humor. Do not spam them on every reply.
-        - Place the tag at the absolute end of the reply text.`
+        - Place the tag at the absolute end of the reply text.${recentMemesStr}`
       },
       {
         role: 'user',
@@ -508,7 +515,7 @@ client.on('messageCreate', async (message) => {
   message.channel.sendTyping();
 
   try {
-    let replyText = await generateAiResponse(content);
+    let replyText = await generateAiResponse(content, recentMemes);
     
     if (!replyText) {
       return message.reply('Yo, I got nothin to say to that.');
@@ -550,17 +557,29 @@ client.on('messageCreate', async (message) => {
     if (memeQuery) {
       const matchedMeme = await getImgflipMeme(memeQuery);
       if (matchedMeme) {
-        const embed = {
-          color: 0x0099ff,
-          title: matchedMeme.name,
-          image: {
-            url: matchedMeme.url,
-          },
-          footer: {
-            text: 'MelloBOT Meme Engine 🕶️',
+        // Prevent duplicate memes by checking recently used templates
+        const isRecent = recentMemes.some(name => name.toLowerCase() === matchedMeme.name.toLowerCase());
+        if (isRecent) {
+          console.log(`Skipping recently used meme to keep it unique: ${matchedMeme.name}`);
+        } else {
+          // Add to recentMemes, limit array length to 5
+          recentMemes.push(matchedMeme.name);
+          if (recentMemes.length > 5) {
+            recentMemes.shift();
           }
-        };
-        replyPayload.embeds = [embed];
+
+          const embed = {
+            color: 0x0099ff,
+            title: matchedMeme.name,
+            image: {
+              url: matchedMeme.url,
+            },
+            footer: {
+              text: 'MelloBOT Meme Engine 🕶️',
+            }
+          };
+          replyPayload.embeds = [embed];
+        }
       }
     }
     
