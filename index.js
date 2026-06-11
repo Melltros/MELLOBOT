@@ -49,6 +49,34 @@ function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// Generate content with retry and exponential backoff
+async function generateContentWithRetry(prompt, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
+        You love to roast users and make fun of their messages with sharp, brutal, and hilarious roasts. Be direct, tease them, and use savage humor to playfully "rage bait" them (provoking funny reactions).
+        If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.
+        User message: ${prompt}`
+      });
+      return response;
+    } catch (err) {
+      const errMsg = (err.message || err.toString()).toLowerCase();
+      const isSafetyBlock = errMsg.includes('safety') || errMsg.includes('blocked') || errMsg.includes('candidate');
+      if (isSafetyBlock) {
+        throw err;
+      }
+      if (i === retries - 1) {
+        throw err;
+      }
+      console.warn(`⚠️ Gemini API failed (attempt ${i + 1}/${retries}). Retrying in ${delay}ms...`, err.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+}
+
 // ===============================
 // BOT READY
 // ===============================
@@ -344,13 +372,7 @@ client.on('messageCreate', async (message) => {
   message.channel.sendTyping();
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
-      You love to roast users and make fun of their messages with sharp, brutal, and hilarious roasts. Be direct, tease them, and use savage humor to playfully "rage bait" them (provoking funny reactions).
-      If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.
-      User message: ${content}`
-    });
+    const response = await generateContentWithRetry(content);
     
     const replyText = response.text || 'Yo, I got nothin to say to that.';
     
@@ -375,7 +397,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(getRandom(safetyRoasts));
     }
     
-    return message.reply(`❌ Yo, my brain got short-circuited. Error: ${err.message || err.toString()}`);
+    return message.reply("❌ Yo, my brain got short-circuited. Try again in a bit.");
   }
 });
 
