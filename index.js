@@ -352,10 +352,10 @@ client.on('messageCreate', async (message) => {
       User message: ${content}`,
       config: {
         safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
         ]
       }
     });
@@ -369,16 +369,21 @@ client.on('messageCreate', async (message) => {
   } catch (err) {
     console.error('❌ Gemini API Error:', err);
     
-    // Fallback list of savage roasts when prompt is blocked or API fails
-    const safetyRoasts = [
-      "Yo, you said some weird garbage that got censored. Stop buggin' and keep it clean.",
-      "Nah, Google's filters blocked your trash message. Even my circuits can't look at that.",
-      "Man, you trippin'. I'm not even gonna respond to that nonsense.",
-      "Your message got censored by the safety team. Clean up your mouth, homie.",
-      "Yo, that take was so wild the API refused to touch it. Try again with some sense."
-    ];
+    const errMsg = (err.message || err.toString()).toLowerCase();
+    const isSafetyBlock = errMsg.includes('safety') || errMsg.includes('blocked') || errMsg.includes('candidate');
     
-    return message.reply(getRandom(safetyRoasts));
+    if (isSafetyBlock) {
+      const safetyRoasts = [
+        "Yo, you said some weird garbage that got censored. Stop buggin' and keep it clean.",
+        "Nah, Google's filters blocked your trash message. Even my circuits can't look at that.",
+        "Man, you trippin'. I'm not even gonna respond to that nonsense.",
+        "Your message got censored by the safety team. Clean up your mouth, homie.",
+        "Yo, that take was so wild the API refused to touch it. Try again with some sense."
+      ];
+      return message.reply(getRandom(safetyRoasts));
+    }
+    
+    return message.reply('❌ Yo, my brain got short-circuited. Try again in a bit.');
   }
 });
 
