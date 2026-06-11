@@ -368,7 +368,17 @@ client.on('messageCreate', async (message) => {
     return message.reply(replyText);
   } catch (err) {
     console.error('❌ Gemini API Error:', err);
-    return message.reply('❌ Yo, my brain got short-circuited. Try again in a bit.');
+    
+    // Fallback list of savage roasts when prompt is blocked or API fails
+    const safetyRoasts = [
+      "Yo, you said some weird garbage that got censored. Stop buggin' and keep it clean.",
+      "Nah, Google's filters blocked your trash message. Even my circuits can't look at that.",
+      "Man, you trippin'. I'm not even gonna respond to that nonsense.",
+      "Your message got censored by the safety team. Clean up your mouth, homie.",
+      "Yo, that take was so wild the API refused to touch it. Try again with some sense."
+    ];
+    
+    return message.reply(getRandom(safetyRoasts));
   }
 });
 
