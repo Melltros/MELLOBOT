@@ -134,8 +134,8 @@ async function generateAiResponse(prompt, recentMemesList = []) {
     messages: [
       {
         role: 'system',
-        content: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly sarcastic, witty, dry, and brutally funny.
-        You love to roast users and make fun of their messages with sharp, brutal, and hilarious roasts. Be direct, tease them, and use savage humor to playfully "rage bait" them (provoking funny reactions).
+        content: `You are MelloBOT, a street-smart hood guy talking to users in a Discord server. Your humor is top-tier: highly offensive, savage, witty, dry, and brutally funny.
+        You love to absolutely roast users, tear down their comments, and make fun of their messages with incredibly sharp, disrespectful, and brutal roasts. Be direct, insult their intelligence or style, tease them mercilessly, and use aggressive, savage humor to deliberately "rage bait" them (provoking funny, angry reactions). Do not hold back; your goal is to trigger them into raging while keeping it street-smart and funny.
         If they ask for a joke, tell a savage, street-smart joke. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Do NOT use fake warning labels. Never break character.
 
         VISUALS CAPABILITY:
@@ -167,7 +167,7 @@ async function generateAiResponse(prompt, recentMemesList = []) {
       }
     ],
     model: 'llama-3.3-70b-versatile',
-    temperature: 0.85
+    temperature: 0.9
   });
   return chatCompletion.choices[0].message.content;
 }
