@@ -2,7 +2,6 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const { GoogleGenAI } = require('@google/genai');
-const autoReplies = require('./replies');
 const db = require('./db');
 
 // ===============================
@@ -12,11 +11,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('🤖 MelloBOT is running 24/7 with premium upgrades!');
+  res.send('🤖 MelloBOT is running 24/7 with Hood AI brain!');
 });
 
 app.listen(PORT, () => {
-  console.log(`📡 Keep-alive web server listening on port ${PORT}`);
+  console.log('📡 Keep-alive web server listening on port ' + PORT);
 });
 
 // ===============================
@@ -38,7 +37,7 @@ if (process.env.GEMINI_API_KEY) {
   ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   console.log('✨ Gemini AI brain loaded successfully!');
 } else {
-  console.log('⚠️ GEMINI_API_KEY is not defined in .env. AI commands and mentions will not be available.');
+  console.log('⚠️ GEMINI_API_KEY is not defined in .env. AI auto-replies will not work.');
 }
 
 // ===============================
@@ -50,41 +49,21 @@ function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Escape regex special characters
-function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Check if message contains trigger word (with smart boundary checks)
-function containsTrigger(messageText, triggers) {
-  const lowerMessage = messageText.toLowerCase();
-  return triggers.some(trigger => {
-    const triggerLower = trigger.toLowerCase();
-    
-    // Boundary-aware matching (so 'f' won't match inside 'for', 'hi' won't match inside 'this')
-    const startBoundary = /^\w/.test(triggerLower) ? '\\b' : '';
-    const endBoundary = /\w$/.test(triggerLower) ? '\\b' : '';
-    const regex = new RegExp(`${startBoundary}${escapeRegExp(triggerLower)}${endBoundary}`, 'i');
-    return regex.test(lowerMessage);
-  });
-}
-
 // ===============================
 // BOT READY
 // ===============================
 client.once('ready', () => {
   console.log(`✅ Bot is online! Logged in as ${client.user.tag}`);
-  console.log(`📋 Loaded ${autoReplies.length} auto replies`);
   
   // Set bot status
-  client.user.setActivity('your messages 👀', { type: 'WATCHING' });
+  client.user.setActivity('the streets 🕶️', { type: 'WATCHING' });
 });
 
 // ===============================
 // MESSAGE HANDLER
 // ===============================
 client.on('messageCreate', async (message) => {
-  // Ignore messages from bots
+  // Ignore messages from bots to prevent infinite chat loops
   if (message.author.bot) return;
 
   const content = message.content.trim();
@@ -252,6 +231,29 @@ client.on('messageCreate', async (message) => {
   // SPECIAL COMMANDS
   // ===============================
 
+  // Help Menu
+  if (lowerContent === '!help' || lowerContent === '!commands') {
+    return message.reply(`📋 **MelloBOT Special Commands List:**
+> 🎲 \`!roll\` - Roll a dice
+> 🪙 \`!flip\` - Flip a coin
+> 🎱 \`!8ball <question>\` - Ask the magic 8ball
+> ⭐ \`!rate <thing>\` - Rate something out of 10
+> 🎯 \`!choose <item1>, <item2>...\` - Choose between items
+> 🤗 \`!hug @user\` - Give someone a hug
+> 👋 \`!slap @user\` - Slap someone
+> 📢 \`!say <text>\` - Make me announce something
+
+👮 **Moderation Commands:**
+> ⚠️ \`!warn @user <reason>\` - Warn a user
+> 📊 \`!warnings @user\` - Check warning history
+> 🧹 \`!purge <amount>\` - Bulk delete messages
+> 🚫 \`!timeout @user <minutes>\` - Timeout/mute a user
+> 👢 \`!kick @user\` - Kick a user
+> 🔨 \`!ban @user\` - Ban a user
+
+💬 *To talk to me normally, just send any chat message! I reply to everything using my street-smart AI brain!*`);
+  }
+
   // Roll a dice
   if (lowerContent === '!roll') {
     const result = Math.floor(Math.random() * 6) + 1;
@@ -325,63 +327,38 @@ client.on('messageCreate', async (message) => {
     return message.channel.send(`📢 ${text}`);
   }
 
-  // ===============================
-  // GEMINI AI BRAIN (Mention/Command Fallback)
-  // ===============================
-  const botMention = `<@${client.user.id}>`;
-  const isMentioned = message.mentions.has(client.user) && !message.mentions.everyone;
-  const isAiCommand = lowerContent.startsWith('!ai ');
-  
-  if (isMentioned || isAiCommand) {
-    if (!ai) {
-      return message.reply('🤖 Sorry, my AI brain (Gemini API) is not configured by the server administrator.');
-    }
-    
-    let prompt = '';
-    if (isAiCommand) {
-      prompt = content.slice(4).trim();
-    } else {
-      prompt = content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
-    }
-    
-    if (!prompt) {
-      return message.reply('🤖 I am listening! Ask me anything: `@MelloBOT <question>` or `!ai <question>`');
-    }
-    
-    message.channel.sendTyping();
-    
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `You are MelloBOT, a friendly, intelligent, and helpful Discord bot. Answer user queries helpfully and naturally. Keep answers relatively concise for Discord chat.
-User query: ${prompt}`
-      });
-      
-      const replyText = response.text || '🤖 Sorry, I generated an empty response.';
-      
-      if (replyText.length > 2000) {
-        return message.reply(replyText.slice(0, 1990) + '... (truncated)');
-      }
-      return message.reply(replyText);
-    } catch (err) {
-      console.error('❌ Gemini API Error:', err);
-      return message.reply('❌ Oops, my AI brain encountered an error processing your query. Please try again later.');
-    }
+  // If a message starts with '!', it was meant to be a command but didn't match any above
+  if (content.startsWith('!')) {
+    return message.reply('❌ Yo, that command doesn\'t exist. Type `!help` to see what I can do.');
   }
 
   // ===============================
-  // AUTO REPLIES (Smart Word Boundary Check)
+  // GEMINI AI BRAIN (Auto-respond to all chat)
   // ===============================
-  for (const reply of autoReplies) {
-    if (containsTrigger(lowerContent, reply.trigger)) {
-      const response = Array.isArray(reply.response)
-        ? getRandom(reply.response)
-        : reply.response;
+  if (!ai) {
+    // If Gemini key is not configured, don't reply to avoid crashes
+    return;
+  }
 
-      // Small delay to feel more natural
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return message.reply(response);
+  // Visual feedback that the bot is processing
+  message.channel.sendTyping();
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `You are MelloBOT, a street-smart hood guy talking to your homies in a Discord server. Use hood slang, keep it real, relaxed, and funny. Remain helpful if they ask for actual assistance, but say it in a hood way. Keep your responses relatively short, punchy, and natural for a chat message (1-3 sentences max). Never break character.
+User message: ${content}`
+    });
+    
+    const replyText = response.text || 'Yo, I got nothin to say to that.';
+    
+    if (replyText.length > 2000) {
+      return message.reply(replyText.slice(0, 1990) + '... (truncated)');
     }
+    return message.reply(replyText);
+  } catch (err) {
+    console.error('❌ Gemini API Error:', err);
+    return message.reply('❌ Yo, my brain got short-circuited. Try again in a bit.');
   }
 });
 
